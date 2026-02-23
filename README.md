@@ -1,2 +1,2 @@
 # Alternative-NewTab
-A nicer customizable newtab for your browser
+A nicer customizable newtab for your browser. Remember to replace wallpaper.png with an image so you can pick whatever you want. In the actual page, you can click the edit on the bottom rigth and then the plus in the bottom left to add widgets like the time, a search bar, or app shortcuts with a customizable name. Press the check button on the bottom right to save changes. Everything is saved locally.
