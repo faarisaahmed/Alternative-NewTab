@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>New Tab</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&display=swap" rel="stylesheet">
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body {
+      background: url("silksong_bench_wpaper.png") no-repeat center center fixed;
+      background-size: cover;
+      color: white;
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none;
+      z-index: 9999;
+      box-shadow: inset 0 0 35px rgba(100, 255, 100, 0.35);
+      border: 2px solid rgba(144, 238, 144, 0.15);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.4s ease, visibility 0.4s ease;
+    }
+
+    body.edit-mode-active::after {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    #widgetArea {
+      position: absolute;
+      top: 80px;
+      left: 60px;
+      width: 100%;
+      height: 100%;
+      background-color: transparent;
+    }
+
+    /* Control Buttons */
+    .control-btn {
+      position: absolute;
+      bottom: 20px;
+      padding: 12px 18px;
+      border-radius: 25px;
+      backdrop-filter: blur(15px);
+      background: rgba(255, 255, 255, 0.15);
+      cursor: pointer;
+      z-index: 10000;
+      transition: all 0.3s ease;
+      user-select: none;
+    }
+
+    .control-btn:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    #addButton {
+      left: 20px;
+      display: none; 
+    }
+
+    #editButton {
+      right: 20px;
+      font-size: 18px;
+    }
+
+    #addPanel {
+      position: absolute;
+      bottom: 75px;
+      left: 20px;
+      padding: 10px;
+      border-radius: 20px;
+      backdrop-filter: blur(15px);
+      background: rgba(0, 0, 0, 0.7);
+      display: none;
+      z-index: 10001;
+    }
+
+    #addPanel div {
+      padding: 8px 15px;
+      cursor: pointer;
+    }
+
+    #addPanel div:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+    }
+
+    .widget {
+      position: absolute;
+      border-radius: 25px;
+      backdrop-filter: blur(20px);
+      background: rgba(255, 255, 255, 0.15);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      transition: left 0.3s ease-out, top 0.3s ease-out, transform 0.2s ease, background 0.4s ease;
+      overflow: hidden;
+      margin: 5px; 
+    }
+
+    .edit-mode-active .widget {
+      cursor: grab;
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    .link-content {
+      color: white;
+      text-decoration: none;
+      font-family: 'Playfair Display', serif;
+      font-weight: 600;
+      text-align: center;
+      width: 100%;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .small-icon { width: 24px; height: 24px; margin-bottom: 6px; border-radius: 4px; }
+    .small-text { font-size: 11px; opacity: 0.9; max-width: 60px; overflow: hidden; text-overflow: ellipsis; }
+
+    .edit-mode-active .link-content { pointer-events: none; }
+
+    /* Search Bar Styles */
+    .search-widget { padding: 0 15px; }
+    .search-form { width: 100%; display: flex; align-items: center; }
+    .search-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 15px;
+      padding: 10px 15px;
+      color: white;
+      font-family: 'Playfair Display', serif;
+      font-size: 16px;
+      outline: none;
+    }
+    .edit-mode-active .search-input { pointer-events: none; }
+
+    .dragging {
+      transition: none !important;
+      z-index: 1000;
+      transform: scale(1.05);
+      cursor: grabbing !important;
+    }
+
+    .clock { flex-direction: column; font-family: 'Playfair Display', serif; }
+    .clock-time { font-size: 22px; letter-spacing: 2px; }
+    .clock-date { font-size: 11px; margin-top: 4px; opacity: 0.8; }
+  </style>
+</head>
+
+<body>
+
+  <div id="widgetArea"></div>
+  
+  <div id="addButton" class="control-btn">+ Add</div>
+  <div id="editButton" class="control-btn">✎</div>
+
+  <div id="addPanel">
+    <div onclick="addClock()">Clock</div>
+    <div onclick="addSearchBar()">Search Bar (4x1)</div>
+    <div onclick="addLink('large')">Custom Link (2x1)</div>
+    <div onclick="addLink('small')">Small Shortcut (1x1)</div>
+    <div onclick="clearStorage()" style="color: #ff8888; border-top: 1px solid #444; margin-top: 5px;">Clear All</div>
+  </div>
+
+  <script>
+    let editMode = false;
+    const widgetArea = document.getElementById("widgetArea");
+    const addButton = document.getElementById("addButton");
+    const editButton = document.getElementById("editButton");
+    const addPanel = document.getElementById("addPanel");
+    const GRID_SIZE = 80;
+    const GAP = 10;
+    const occupied = new Set();
+
+    editButton.onclick = () => {
+      editMode = !editMode;
+      document.body.classList.toggle("edit-mode-active", editMode);
+      addButton.style.display = editMode ? "block" : "none";
+      editButton.textContent = editMode ? "✓" : "✎";
+      if (!editMode) addPanel.style.display = "none";
+      document.querySelectorAll(".widget").forEach(setWidgetState);
+      if (!editMode) saveLayout();
+    };
+
+    function setWidgetState(w) {
+      if (editMode) {
+        enableDragging(w);
+        w.oncontextmenu = (e) => {
+          e.preventDefault();
+          unoccupy(parseInt(w.dataset.lastX), parseInt(w.dataset.lastY), parseInt(w.dataset.w), parseInt(w.dataset.h));
+          w.remove();
+          saveLayout();
+        };
+
+        // Text Edit on Double Click (Links only)
+        if (w.dataset.type === 'link-large' || w.dataset.type === 'link-small') {
+          w.ondblclick = () => {
+            const newName = prompt("Enter new name for this link:", w.dataset.name);
+            if (newName !== null && newName.trim() !== "") {
+              w.dataset.name = newName.trim();
+              updateWidgetDisplay(w);
+              saveLayout();
+            }
+          };
+        }
+      } else {
+        w.onmousedown = null;
+        w.oncontextmenu = null;
+        w.ondblclick = null;
+      }
+    }
+
+    function updateWidgetDisplay(w) {
+      const name = w.dataset.name;
+      const content = w.querySelector('.link-content');
+      if (w.dataset.type === 'link-large') {
+        content.textContent = name;
+      } else {
+        const textEl = content.querySelector('.small-text');
+        if (textEl) textEl.textContent = name;
+      }
+    }
+
+    addButton.onclick = () => {
+      addPanel.style.display = addPanel.style.display === "block" ? "none" : "block";
+    };
+
+    function enableDragging(el) {
+      el.onmousedown = function(e) {
+        if (!editMode || e.button !== 0) return;
+        const rect = el.getBoundingClientRect();
+        const parentRect = widgetArea.getBoundingClientRect();
+        const shiftX = e.clientX - rect.left;
+        const shiftY = e.clientY - rect.top;
+
+        el.classList.add("dragging");
+        unoccupy(parseInt(el.dataset.lastX), parseInt(el.dataset.lastY), parseInt(el.dataset.w), parseInt(el.dataset.h));
+
+        function onMouseMove(e) {
+          el.style.left = (e.clientX - parentRect.left - shiftX - 5) + "px";
+          el.style.top = (e.clientY - parentRect.top - shiftY - 5) + "px";
+        }
+
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", () => {
+          document.removeEventListener("mousemove", onMouseMove);
+          el.classList.remove("dragging");
+          snapToGrid(el);
+          saveLayout();
+        }, { once: true });
+      };
+    }
+
+    function snapToGrid(el) {
+      const wU = parseInt(el.dataset.w), hU = parseInt(el.dataset.h);
+      let tx = Math.round(parseInt(el.style.left) / GRID_SIZE);
+      let ty = Math.round(parseInt(el.style.top) / GRID_SIZE);
+      let fx = tx, fy = ty;
+
+      if (isOccupied(tx, ty, wU, hU)) {
+        let found = false, dist = 1;
+        while (!found && dist < 15) {
+          for (let dx = -dist; dx <= dist; dx++) {
+            for (let dy = -dist; dy <= dist; dy++) {
+              if (Math.abs(dx) === dist || Math.abs(dy) === dist) {
+                let nx = tx + dx, ny = ty + dy;
+                if (nx >= 0 && ny >= 0 && !isOccupied(nx, ny, wU, hU)) {
+                  fx = nx; fy = ny; found = true; break;
+                }
+              }
+            }
+            if (found) break;
+          }
+          dist++;
+        }
+      }
+      occupy(fx, fy, wU, hU);
+      el.dataset.lastX = fx; el.dataset.lastY = fy;
+      el.style.left = (fx * GRID_SIZE) + "px";
+      el.style.top = (fy * GRID_SIZE) + "px";
+    }
+
+    function isOccupied(x, y, w, h) {
+      for (let i = 0; i < w; i++) 
+        for (let j = 0; j < h; j++) 
+          if (occupied.has((x + i) + "-" + (y + j))) return true;
+      return false;
+    }
+
+    function occupy(x, y, w, h) {
+      for (let i = 0; i < w; i++) 
+        for (let j = 0; j < h; j++) occupied.add((x + i) + "-" + (y + j));
+    }
+
+    function unoccupy(x, y, w, h) {
+      for (let i = 0; i < w; i++) 
+        for (let j = 0; j < h; j++) occupied.delete((x + i) + "-" + (y + j));
+    }
+
+    function createWidgetBase(wU, hU, type) {
+      const el = document.createElement("div");
+      el.className = "widget " + type;
+      el.style.width = (GRID_SIZE * wU - GAP) + "px";
+      el.style.height = (GRID_SIZE * hU - GAP) + "px";
+      el.dataset.w = wU; el.dataset.h = hU; el.dataset.type = type;
+      return el;
+    }
+
+    function addClock(savedData = null) {
+      const clock = createWidgetBase(2, 2, "clock");
+      clock.innerHTML = `<div class="clock-time"></div><div class="clock-date"></div>`;
+      const timeEl = clock.querySelector(".clock-time");
+      const dateEl = clock.querySelector(".clock-date");
+
+      function update() {
+        const now = new Date();
+        timeEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        dateEl.textContent = now.toLocaleDateString();
+      }
+      setInterval(update, 1000); update();
+      widgetArea.appendChild(clock);
+      autoPlaceOrLoad(clock, savedData);
+    }
+
+    function addSearchBar(savedData = null) {
+          const search = createWidgetBase(4, 1, "search-bar");
+          search.classList.add("search-widget");
+          
+          // Added target="_blank" to the form so results open in a new tab
+          search.innerHTML = `
+            <form class="search-form" action="https://www.google.com/search" method="GET" target="_blank">
+              <input type="text" name="q" class="search-input" placeholder="Search Google..." autocomplete="off">
+            </form>
+          `;
+
+          widgetArea.appendChild(search);
+          autoPlaceOrLoad(search, savedData);
+        }
+
+    function addLink(size, savedData = null) {
+      let name, url;
+      if (!savedData) {
+        let input = prompt("Enter Name and Link (e.g. Google, google.com):");
+        if (!input) return;
+        if (input.includes(',')) [name, url] = input.split(',').map(s => s.trim());
+        else { url = input.trim(); name = url.replace(/^(https?:\/\/)?(www\.)?/, '').split('.')[0]; name = name.charAt(0).toUpperCase() + name.slice(1); }
+        if (!url.startsWith('http')) url = 'https://' + url;
+      } else {
+        name = savedData.name; url = savedData.url;
+      }
+
+      const wU = (size === 'large') ? 2 : 1;
+      const hU = 1;
+      const link = createWidgetBase(wU, hU, size === 'large' ? 'link-large' : 'link-small');
+      link.dataset.name = name; link.dataset.url = url;
+
+      const fav = `https://www.google.com/s2/favicons?domain=${url}&sz=64`;
+      
+      if (size === 'large') {
+        link.innerHTML = `<a href="${url}" target="_blank" class="link-content">${name}</a>`;
+      } else {
+        link.innerHTML = `<a href="${url}" target="_blank" class="link-content">
+          <img src="${fav}" class="small-icon">
+          <div class="small-text">${name}</div>
+        </a>`;
+      }
+
+      widgetArea.appendChild(link);
+      autoPlaceOrLoad(link, savedData);
+    }
+
+    function autoPlaceOrLoad(el, savedData) {
+      if (savedData) {
+        el.style.left = (savedData.x * GRID_SIZE) + "px";
+        el.style.top = (savedData.y * GRID_SIZE) + "px";
+      } else {
+        let sx = 0, sy = 0;
+        while (isOccupied(sx, sy, parseInt(el.dataset.w), parseInt(el.dataset.h))) sx++;
+        el.style.left = (sx * GRID_SIZE) + "px";
+        el.style.top = (sy * GRID_SIZE) + "px";
+      }
+      snapToGrid(el);
+      setWidgetState(el);
+      addPanel.style.display = "none";
+    }
+
+    function saveLayout() {
+      const data = [];
+      document.querySelectorAll(".widget").forEach(w => {
+        data.push({
+          type: w.dataset.type,
+          x: parseInt(w.dataset.lastX),
+          y: parseInt(w.dataset.lastY),
+          w: parseInt(w.dataset.w),
+          h: parseInt(w.dataset.h),
+          name: w.dataset.name,
+          url: w.dataset.url
+        });
+      });
+      localStorage.setItem("tabLayout", JSON.stringify(data));
+    }
+
+    function loadLayout() {
+      const saved = localStorage.getItem("tabLayout");
+      if (!saved) { addClock(); return; }
+      const data = JSON.parse(saved);
+      data.forEach(item => {
+        if (item.type === 'clock') addClock(item);
+        else if (item.type === 'search-bar') addSearchBar(item);
+        else if (item.type === 'link-large') addLink('large', item);
+        else if (item.type === 'link-small') addLink('small', item);
+      });
+    }
+
+    function clearStorage() {
+      if(confirm("Clear all widgets and links?")) {
+        localStorage.clear();
+        location.reload();
+      }
+    }
+
+    window.onload = loadLayout;
+  </script>
+</body>
+</html>
